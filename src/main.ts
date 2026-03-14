@@ -1,15 +1,19 @@
-import { Plugin } from "obsidian";
+import { Plugin, Modal, Setting, Notice } from "obsidian";
 import { ConnectorSettingTab, DEFAULT_SETTINGS, PluginSettings } from "./settings";
 import { LinkRegistry } from "./registry";
+import { ScaffoldingService } from "./scaffolding";
+import { ExcalidrawService } from "./excalidraw";
+import { TerminalService } from "./terminal";
+import { FileSyncService } from "./file-sync";
+import { ChatPanelView, CHAT_PANEL_VIEW } from "./chat-panel";
 
 export default class ObsidianConnectorPlugin extends Plugin {
   settings: PluginSettings;
   registry: LinkRegistry;
-  // These will be populated in Task 13 when all services are wired:
-  fileSyncService: any;
-  scaffoldingService: any;
-  excalidrawService: any;
-  terminalService: any;
+  scaffoldingService: ScaffoldingService;
+  excalidrawService: ExcalidrawService;
+  terminalService: TerminalService;
+  fileSyncService: FileSyncService;
 
   private _data: any = {};
 
@@ -28,6 +32,12 @@ export default class ObsidianConnectorPlugin extends Plugin {
     });
     await this.registry.load();
 
+    this.scaffoldingService = new ScaffoldingService(this.app);
+    this.excalidrawService = new ExcalidrawService(this.app);
+    this.terminalService = new TerminalService(this.settings.terminalApp);
+    this.fileSyncService = new FileSyncService(this);
+
+    this.registerView(CHAT_PANEL_VIEW, (leaf) => new ChatPanelView(leaf, this));
     this.addSettingTab(new ConnectorSettingTab(this.app, this));
 
     this.addCommand({
@@ -52,14 +62,89 @@ export default class ObsidianConnectorPlugin extends Plugin {
   async saveSettings() {
     this._data.settings = this.settings;
     await this.saveData(this._data);
-    // terminalService will be re-created in Task 13 when settings change
+    this.terminalService = new TerminalService(this.settings.terminalApp);
   }
 
   async runLinkSetupPublic() {
-    // Full implementation in Task 13
+    const activeFile = this.app.workspace.getActiveFile();
+    if (!activeFile) return;
+    const vaultPath = (activeFile as any).parent?.path ?? "";
+
+    if (this.registry.isLinked(vaultPath)) {
+      const proceed = await this.confirm(`"${vaultPath}" is already linked. Re-link?`);
+      if (!proceed) return;
+      await this.registry.unlink(vaultPath);
+    }
+
+    const codePath = await this.promptText("Code project directory (absolute path or ~/...):");
+    if (!codePath) return;
+
+    try {
+      await this.registry.link(vaultPath, codePath);
+    } catch (e: any) {
+      new Notice(e.message);
+      return;
+    }
+
+    const basePath = (this.app.vault.adapter as any).getBasePath?.() ?? "";
+    const vaultAbsPath = basePath ? `${basePath}/${vaultPath}` : vaultPath;
+    const result = await this.scaffoldingService.scaffold(codePath, vaultAbsPath);
+
+    if (result.errors.some((e: string) => e.includes("uv is not installed"))) {
+      new Notice(result.errors[0]);
+      await this.registry.unlink(vaultPath);
+      return;
+    }
+
+    if (result.errors.length > 0) {
+      new Notice(result.errors.join("\n"));
+    }
+
+    await this.fileSyncService.syncGitignore();
+    await this.fileSyncService.syncEnvExample();
+    new Notice("Project linked successfully!");
   }
 
   private async openChatPanel() {
-    // Full implementation in Task 13
+    const leaf = this.app.workspace.getRightLeaf(false);
+    if (!leaf) return;
+    await leaf.setViewState({ type: CHAT_PANEL_VIEW, active: true });
+    this.app.workspace.revealLeaf(leaf);
+  }
+
+  private promptText(message: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      let result: string | null = null;
+      const modal = new (class extends Modal {
+        onOpen() {
+          this.contentEl.createEl("p", { text: message });
+          const input = this.contentEl.createEl("input", {
+            attr: { type: "text", style: "width:100%;margin-bottom:8px" }
+          }) as HTMLInputElement;
+          input.oninput = () => { result = input.value; };
+          const btn = this.contentEl.createEl("button", { text: "OK" });
+          btn.onclick = () => this.close();
+        }
+        onClose() { resolve(result); }
+      })(this.app);
+      modal.open();
+    });
+  }
+
+  private confirm(message: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const modal = new (class extends Modal {
+        onOpen() {
+          this.contentEl.createEl("p", { text: message });
+          const row = this.contentEl.createEl("div");
+          const yes = row.createEl("button", { text: "Yes" });
+          const no = row.createEl("button", { text: "Cancel" });
+          yes.onclick = () => { this.close(); resolve(true); };
+          no.onclick = () => { this.close(); resolve(false); };
+        }
+        onClose() { resolve(false); }
+      })(this.app);
+      modal.open();
+    });
   }
 }
