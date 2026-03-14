@@ -100,8 +100,8 @@ export default class ObsidianConnectorPlugin extends Plugin {
       new Notice(result.errors.join("\n"));
     }
 
-    await this.fileSyncService.syncGitignore();
-    await this.fileSyncService.syncEnvExample();
+    await this.fileSyncService.syncGitignoreForPath(codePath);
+    await this.fileSyncService.syncEnvExampleForPath(codePath);
     new Notice("Project linked successfully!");
   }
 
@@ -133,16 +133,17 @@ export default class ObsidianConnectorPlugin extends Plugin {
 
   private confirm(message: string): Promise<boolean> {
     return new Promise((resolve) => {
+      let resolved = false;
       const modal = new (class extends Modal {
         onOpen() {
           this.contentEl.createEl("p", { text: message });
           const row = this.contentEl.createEl("div");
           const yes = row.createEl("button", { text: "Yes" });
           const no = row.createEl("button", { text: "Cancel" });
-          yes.onclick = () => { this.close(); resolve(true); };
-          no.onclick = () => { this.close(); resolve(false); };
+          yes.onclick = () => { resolved = true; resolve(true); this.close(); };
+          no.onclick = () => { resolved = true; resolve(false); this.close(); };
         }
-        onClose() { resolve(false); }
+        onClose() { if (!resolved) resolve(false); }
       })(this.app);
       modal.open();
     });

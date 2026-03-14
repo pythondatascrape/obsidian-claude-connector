@@ -1,5 +1,6 @@
 import * as fs from "fs/promises";
 import * as path from "path";
+import { expandTilde } from "./utils";
 
 const BEGIN_MARKER = "# [Obsidian Connector] BEGIN";
 const END_MARKER = "# [Obsidian Connector] END";
@@ -44,7 +45,7 @@ export class FileSyncService {
     const codePath = this.plugin.registry.getCodePath(vaultPath);
     if (!codePath) return;
 
-    const resolved = codePath.replace("~", process.env.HOME ?? "");
+    const resolved = expandTilde(codePath);
     const gitignorePath = path.join(resolved, ".gitignore");
 
     let existing = "";
@@ -61,7 +62,22 @@ export class FileSyncService {
     const codePath = this.plugin.registry.getCodePath(vaultPath);
     if (!codePath) return;
 
-    const resolved = codePath.replace("~", process.env.HOME ?? "");
+    const resolved = expandTilde(codePath);
+    const dest = path.join(resolved, ".env.example");
+    await fs.writeFile(dest, this.plugin.settings.envExampleContent, "utf-8");
+  }
+
+  async syncGitignoreForPath(codePath: string): Promise<void> {
+    const resolved = expandTilde(codePath);
+    const gitignorePath = path.join(resolved, ".gitignore");
+    let existing = "";
+    try { existing = await fs.readFile(gitignorePath, "utf-8"); } catch {}
+    const updated = injectManagedBlock(existing, this.plugin.settings.gitignoreRules);
+    await fs.writeFile(gitignorePath, updated, "utf-8");
+  }
+
+  async syncEnvExampleForPath(codePath: string): Promise<void> {
+    const resolved = expandTilde(codePath);
     const dest = path.join(resolved, ".env.example");
     await fs.writeFile(dest, this.plugin.settings.envExampleContent, "utf-8");
   }

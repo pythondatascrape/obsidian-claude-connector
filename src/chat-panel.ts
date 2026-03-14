@@ -1,4 +1,5 @@
 import { ItemView, WorkspaceLeaf, Notice } from "obsidian";
+import { expandTilde } from "./utils";
 import { scoreNotes, NoteNode } from "./graph";
 import {
   estimateTokens,
@@ -62,7 +63,7 @@ export class ChatPanelView extends ItemView {
 
     // Stale registry check
     const { access } = await import("fs/promises");
-    const resolvedCode = codePath.replace("~", process.env.HOME ?? "");
+    const resolvedCode = expandTilde(codePath);
     let codePathExists = true;
     try { await access(resolvedCode); } catch { codePathExists = false; }
 
@@ -106,13 +107,19 @@ export class ChatPanelView extends ItemView {
     summary.createEl("span", { text: `Context: ${totalTokens} tokens (${this.selectedNotes.length + 1} notes)` });
 
     // Secret warnings
-    const allContent = [primaryContent, ...this.selectedNotes.map(n => n.content)];
-    const warnings = allContent.flatMap(c => scanSecrets(c));
-    if (warnings.length > 0) {
+    const noteWarnings: { path: string; flags: string[] }[] = [];
+    const primaryFlags = scanSecrets(primaryContent);
+    if (primaryFlags.length > 0) noteWarnings.push({ path: activeFile.path, flags: primaryFlags });
+    for (const note of this.selectedNotes) {
+      const flags = scanSecrets(note.content);
+      if (flags.length > 0) noteWarnings.push({ path: note.path, flags });
+    }
+
+    if (noteWarnings.length > 0) {
       const warnEl = containerEl.createEl("div", { cls: "oc-banner oc-warning" });
       warnEl.createEl("strong", { text: "⚠ Secret patterns detected in context notes." });
-      const preview = warnings.slice(0, 3).join(", ") + (warnings.length > 3 ? "..." : "");
-      warnEl.createEl("p", { text: preview });
+      const noteList = noteWarnings.map(n => n.path).join(", ");
+      warnEl.createEl("p", { text: `Flagged notes: ${noteList}` });
     }
 
     // Chat history
@@ -154,7 +161,7 @@ export class ChatPanelView extends ItemView {
     startBtn.onclick = async () => {
       try {
         await writeContextFile(codePath, contextContent);
-        await this.plugin.fileSyncService?.syncEnvExample();
+        await this.plugin.fileSyncService?.syncEnvExampleForPath(codePath);
         await this.plugin.terminalService?.launch(codePath);
       } catch (e: any) {
         new Notice(`Start Coding failed: ${e.message}`);

@@ -1,9 +1,10 @@
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { expandTilde } from "./utils";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface ScaffoldResult {
   uvDone: boolean;
@@ -51,14 +52,14 @@ export class ScaffoldingService {
   async scaffold(codePath: string, vaultAbsPath: string): Promise<ScaffoldResult> {
     const result: ScaffoldResult = { uvDone: false, ghDone: false, claudeMdWritten: false, errors: [] };
 
-    const resolved = codePath.replace("~", process.env.HOME ?? "");
+    const resolved = expandTilde(codePath);
 
     let dirExists = false;
     try { await fs.access(resolved); dirExists = true; } catch {}
 
     if (!dirExists) {
       try {
-        await execAsync(this.buildUvCommand(resolved));
+        await execFileAsync("uv", ["init", resolved]);
         result.uvDone = true;
       } catch (e: any) {
         const msg = e.message ?? "";
@@ -73,7 +74,7 @@ export class ScaffoldingService {
 
     const projectName = path.basename(resolved);
     try {
-      await execAsync(this.buildGhCommand(projectName, resolved));
+      await execFileAsync("gh", ["repo", "create", projectName, "--private", `--source=${resolved}`, "--push"]);
       result.ghDone = true;
     } catch (e: any) {
       result.errors.push(`GitHub setup skipped: ${e.message}`);

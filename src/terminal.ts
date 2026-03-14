@@ -1,5 +1,6 @@
 import { exec } from "child_process";
 import { promisify } from "util";
+import { expandTilde } from "./utils";
 
 const execAsync = promisify(exec);
 
@@ -19,7 +20,7 @@ export class TerminalService {
   }
 
   async launch(codePath: string): Promise<void> {
-    const resolved = codePath.replace("~", process.env.HOME ?? "");
+    const resolved = expandTilde(codePath);
     const cmd = buildTerminalCommand(this.terminalApp, resolved);
     try {
       await execAsync(cmd);

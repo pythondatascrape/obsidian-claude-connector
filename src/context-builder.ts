@@ -1,5 +1,6 @@
 import * as fs from "fs/promises";
 import * as path from "path";
+import { expandTilde } from "./utils";
 
 const SECRET_PATTERNS = /(?:key|token|secret|password|api_key)=/i;
 
@@ -59,7 +60,7 @@ export function buildContextFile(
 }
 
 export async function writeContextFile(codePath: string, content: string): Promise<void> {
-  const resolved = codePath.replace("~", process.env.HOME ?? "");
+  const resolved = expandTilde(codePath);
   const dest = path.join(resolved, ".claude-context.md");
   await fs.writeFile(dest, content, "utf-8");
 }
