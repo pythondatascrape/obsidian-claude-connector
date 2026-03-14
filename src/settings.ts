@@ -1,7 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 
 export interface PluginSettings {
-  anthropicApiKey: string;
   tokenBudget: number;
   terminalApp: string;
   gitignoreRules: string;
@@ -9,7 +8,6 @@ export interface PluginSettings {
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
-  anthropicApiKey: "",
   tokenBudget: 8000,
   terminalApp: "Terminal",
   gitignoreRules: "",
@@ -28,19 +26,6 @@ export class ConnectorSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     containerEl.createEl("h2", { text: "Obsidian Connector" });
-
-    new Setting(containerEl)
-      .setName("Anthropic API Key")
-      .setDesc("Stored encrypted in plugin data. Never written to your vault.")
-      .addText((text) =>
-        text
-          .setPlaceholder("sk-ant-...")
-          .setValue(this.plugin.settings.anthropicApiKey)
-          .onChange(async (value: string) => {
-            this.plugin.settings.anthropicApiKey = value;
-            await this.plugin.saveSettings();
-          })
-      );
 
     new Setting(containerEl)
       .setName("Token Budget")

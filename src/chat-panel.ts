@@ -1,23 +1,17 @@
 import { ItemView, WorkspaceLeaf, Notice } from "obsidian";
-import { expandTilde } from "./utils";
 import { scoreNotes, NoteNode } from "./graph";
 import {
   estimateTokens,
   greedySelect,
   buildContextFile,
   writeContextFile,
-  scanSecrets,
   NoteWithContent,
 } from "./context-builder";
-import { streamMessage, Message } from "./claude-api";
 
 export const CHAT_PANEL_VIEW = "obsidian-connector-chat";
 
 export class ChatPanelView extends ItemView {
   plugin: any;
-  private messages: Message[] = [];
-  private systemPrompt = "";
-  private selectedNotes: NoteWithContent[] = [];
 
   constructor(leaf: WorkspaceLeaf, plugin: any) {
     super(leaf);
@@ -25,8 +19,8 @@ export class ChatPanelView extends ItemView {
   }
 
   getViewType() { return CHAT_PANEL_VIEW; }
-  getDisplayText() { return "Claude Chat"; }
-  getIcon() { return "message-square"; }
+  getDisplayText() { return "Claude Context"; }
+  getIcon() { return "file-code"; }
 
   async onOpen() {
     await this.render();
@@ -35,11 +29,11 @@ export class ChatPanelView extends ItemView {
   async render() {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.addClass("obsidian-connector-chat");
+    containerEl.addClass("obsidian-connector-panel");
 
     const activeFile = this.app.workspace.getActiveFile();
     if (!activeFile) {
-      containerEl.createEl("p", { text: "Open a note to start." });
+      containerEl.createEl("p", { text: "Open a note to see context." });
       return;
     }
 
@@ -48,22 +42,14 @@ export class ChatPanelView extends ItemView {
 
     if (!codePath) {
       containerEl.createEl("p", { text: "This folder is not linked to a code project." });
-      containerEl.createEl("p", { text: "Run: Obsidian Connector: Link project" });
-      return;
-    }
-
-    // API key guard — spec requires inline error + disabled panel if key missing
-    if (!this.plugin.settings.anthropicApiKey) {
-      const errEl = containerEl.createEl("div", { cls: "oc-banner oc-error" });
-      errEl.createEl("span", { text: "Anthropic API key not set. " });
-      const link = errEl.createEl("a", { text: "Open settings", href: "#" });
-      link.onclick = () => (this.app as any).setting?.open();
+      const hint = containerEl.createEl("p");
+      hint.createEl("code", { text: "Obsidian Connector: Link project" });
       return;
     }
 
     // Stale registry check
     const { access } = await import("fs/promises");
-    const resolvedCode = expandTilde(codePath);
+    const resolvedCode = codePath.replace(/^~/, process.env.HOME ?? "");
     let codePathExists = true;
     try { await access(resolvedCode); } catch { codePathExists = false; }
 
@@ -72,16 +58,16 @@ export class ChatPanelView extends ItemView {
       banner.createEl("span", { text: `Code project not found: ${codePath}` });
       const relinkBtn = banner.createEl("button", { text: "Re-link" });
       relinkBtn.onclick = () => this.plugin.runLinkSetupPublic();
-      containerEl.createEl("hr");
     }
 
-    // Build graph + select notes
+    // Build graph context
     const allNotes = this.buildNoteNodes();
     const rootNode = allNotes.find(n => n.path === activeFile.path) ?? {
       path: activeFile.path, tags: [], links: [], backlinks: []
     };
     const scored = scoreNotes(rootNode, allNotes);
     const primaryContent = await this.app.vault.read(activeFile);
+    const primaryTokens = estimateTokens(primaryContent);
 
     const candidatesWithContent: NoteWithContent[] = [];
     for (const s of scored) {
@@ -93,85 +79,76 @@ export class ChatPanelView extends ItemView {
       } catch {}
     }
 
-    const primaryTokens = estimateTokens(primaryContent);
     const remaining = this.plugin.settings.tokenBudget - primaryTokens;
-    this.selectedNotes = greedySelect(candidatesWithContent, remaining);
+    const selectedNotes = greedySelect(candidatesWithContent, remaining);
 
-    const excalidrawPaths = this.findExcalidrawFiles(vaultPath);
-    const contextContent = buildContextFile(primaryContent, this.selectedNotes, excalidrawPaths);
-    this.systemPrompt = `You are a development assistant. The following is the project context from the linked Obsidian vault.\n\n${contextContent}\n\nWhen asked to create a diagram, output a valid .excalidraw JSON object wrapped in a code block labeled \`excalidraw\`.`;
+    const excalidrawPaths = this.app.vault.getFiles()
+      .filter((f: any) => f.path.startsWith(vaultPath) && f.extension === "excalidraw")
+      .map((f: any) => f.path);
+
+    const contextContent = buildContextFile(primaryContent, selectedNotes, excalidrawPaths);
+    const totalTokens = estimateTokens(contextContent);
+
+    // Header
+    containerEl.createEl("h4", { text: "Context Preview" });
 
     // Token summary
-    const totalTokens = estimateTokens(contextContent);
     const summary = containerEl.createEl("div", { cls: "oc-token-summary" });
-    summary.createEl("span", { text: `Context: ${totalTokens} tokens (${this.selectedNotes.length + 1} notes)` });
+    summary.createEl("span", {
+      text: `${totalTokens} tokens · ${selectedNotes.length + 1} notes · ${excalidrawPaths.length} diagrams`
+    });
 
-    // Secret warnings
-    const noteWarnings: { path: string; flags: string[] }[] = [];
-    const primaryFlags = scanSecrets(primaryContent);
-    if (primaryFlags.length > 0) noteWarnings.push({ path: activeFile.path, flags: primaryFlags });
-    for (const note of this.selectedNotes) {
-      const flags = scanSecrets(note.content);
-      if (flags.length > 0) noteWarnings.push({ path: note.path, flags });
+    // Primary note
+    const primaryEl = containerEl.createEl("div", { cls: "oc-note-item oc-primary" });
+    primaryEl.createEl("span", { text: `📄 ${activeFile.basename}` });
+    primaryEl.createEl("span", { cls: "oc-tokens", text: `${primaryTokens}t` });
+
+    // Related notes list
+    if (selectedNotes.length > 0) {
+      containerEl.createEl("p", { cls: "oc-section-label", text: "Related notes included:" });
+      for (const note of selectedNotes) {
+        const noteEl = containerEl.createEl("div", { cls: "oc-note-item" });
+        const name = note.path.split("/").pop() ?? note.path;
+        noteEl.createEl("span", { text: `↳ ${name}` });
+        noteEl.createEl("span", { cls: "oc-tokens", text: `${estimateTokens(note.content)}t` });
+      }
     }
 
-    if (noteWarnings.length > 0) {
-      const warnEl = containerEl.createEl("div", { cls: "oc-banner oc-warning" });
-      warnEl.createEl("strong", { text: "⚠ Secret patterns detected in context notes." });
-      const noteList = noteWarnings.map(n => n.path).join(", ");
-      warnEl.createEl("p", { text: `Flagged notes: ${noteList}` });
+    // Excalidraw files
+    if (excalidrawPaths.length > 0) {
+      containerEl.createEl("p", { cls: "oc-section-label", text: "Diagrams referenced:" });
+      for (const p of excalidrawPaths) {
+        const name = p.split("/").pop() ?? p;
+        containerEl.createEl("div", { cls: "oc-note-item", text: `⬡ ${name}` });
+      }
     }
 
-    // Chat history
-    const historyEl = containerEl.createEl("div", { cls: "oc-chat-history" });
-    this.messages.forEach(m => this.appendMessage(historyEl, m.role, m.content));
+    containerEl.createEl("hr");
 
-    // Input
-    const inputEl = containerEl.createEl("textarea", {
-      cls: "oc-chat-input",
-      attr: { placeholder: "Ask Claude..." }
-    }) as HTMLTextAreaElement;
-
-    const sendBtn = containerEl.createEl("button", { text: "Send", cls: "oc-btn" });
-    sendBtn.onclick = async () => {
-      const text = inputEl.value.trim();
-      if (!text) return;
-      inputEl.value = "";
-      this.messages.push({ role: "user", content: text });
-      this.appendMessage(historyEl, "user", text);
-
-      const assistantEl = historyEl.createEl("div", { cls: "oc-msg oc-assistant" });
-      let full = "";
-
-      await streamMessage({
-        apiKey: this.plugin.settings.anthropicApiKey,
-        systemPrompt: this.systemPrompt,
-        messages: this.messages,
-        onChunk: (chunk) => { full += chunk; assistantEl.textContent = full; },
-        onDone: async () => {
-          this.messages.push({ role: "assistant", content: full });
-          await this.handleExcalidraw(full, vaultPath);
-        },
-        onError: (err) => { assistantEl.textContent = `Error: ${err}`; },
-      });
-    };
+    // Code project path
+    const pathEl = containerEl.createEl("div", { cls: "oc-code-path" });
+    pathEl.createEl("span", { text: `→ ${codePath}` });
 
     // Start Coding button
-    const startBtn = containerEl.createEl("button", { text: "Start Coding →", cls: "oc-btn oc-primary" });
+    const startBtn = containerEl.createEl("button", {
+      text: "Start Coding →",
+      cls: "oc-btn oc-primary"
+    });
+    startBtn.disabled = !codePathExists;
     startBtn.onclick = async () => {
+      startBtn.disabled = true;
+      startBtn.textContent = "Launching…";
       try {
         await writeContextFile(codePath, contextContent);
         await this.plugin.fileSyncService?.syncEnvExampleForPath(codePath);
         await this.plugin.terminalService?.launch(codePath);
+        startBtn.textContent = "Launched ✓";
       } catch (e: any) {
         new Notice(`Start Coding failed: ${e.message}`);
+        startBtn.disabled = false;
+        startBtn.textContent = "Start Coding →";
       }
     };
-  }
-
-  private appendMessage(container: HTMLElement, role: "user" | "assistant", content: string) {
-    const el = container.createEl("div", { cls: `oc-msg oc-${role}` });
-    el.textContent = content;
   }
 
   private buildNoteNodes(): NoteNode[] {
@@ -191,18 +168,5 @@ export class ChatPanelView extends ItemView {
       } catch {}
       return { path: f.path, tags, links, backlinks };
     });
-  }
-
-  private findExcalidrawFiles(vaultFolderPath: string): string[] {
-    return this.app.vault.getFiles()
-      .filter((f: any) => f.path.startsWith(vaultFolderPath) && f.extension === "excalidraw")
-      .map((f: any) => f.path);
-  }
-
-  private async handleExcalidraw(response: string, vaultPath: string) {
-    const match = response.match(/```excalidraw\n([\s\S]*?)\n```/);
-    if (!match) return;
-    const json = match[1];
-    await this.plugin.excalidrawService?.write(json, vaultPath);
   }
 }
