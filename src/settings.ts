@@ -2,11 +2,30 @@ import { App, PluginSettingTab, Setting, Notice } from "obsidian";
 import { execFile } from "child_process";
 import { access } from "fs/promises";
 
+export const DEFAULT_CLAUDE_MD_TEMPLATE = `# Obsidian Connector — Claude Code Instructions
+
+## Context
+This project is linked to an Obsidian vault folder.
+
+**Vault docs:** {{vaultPath}}
+
+## On Startup
+1. Read \`.claude-context.md\` in this directory for curated project context.
+2. Treat the vault folder above as the documentation source — refer to it for design decisions.
+
+## After Each Git Commit
+Write a changelog entry to \`{{vaultPath}}/changelog.md\`:
+- Format: \`## YYYY-MM-DD HH:MM — <one-line summary>\` followed by bullet points
+- Append to the top of the file; create the file if it doesn't exist
+- Sessions with no commits produce no entry
+`;
+
 export interface PluginSettings {
   tokenBudget: number;
   terminalApp: string;
   gitignoreRules: string;
   envExampleContent: string;
+  claudeMdTemplate: string;
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
@@ -14,6 +33,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   terminalApp: "Terminal",
   gitignoreRules: "",
   envExampleContent: "ANTHROPIC_API_KEY=\n",
+  claudeMdTemplate: DEFAULT_CLAUDE_MD_TEMPLATE,
 };
 
 export class ConnectorSettingTab extends PluginSettingTab {
@@ -82,6 +102,32 @@ export class ConnectorSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       );
+
+    containerEl.createEl("h3", { text: "CLAUDE.md Template" });
+    containerEl.createEl("p", {
+      text: "Written to CLAUDE.md in the code project when you link a new project. Supports variables: {{vaultPath}}, {{projectName}}.",
+      cls: "setting-item-description",
+    });
+    new Setting(containerEl)
+      .addTextArea((text) => {
+        text
+          .setValue(this.plugin.settings.claudeMdTemplate)
+          .onChange(async (value: string) => {
+            this.plugin.settings.claudeMdTemplate = value;
+            await this.plugin.saveSettings();
+          });
+        text.inputEl.rows = 16;
+        text.inputEl.style.width = "100%";
+        text.inputEl.style.fontFamily = "monospace";
+        text.inputEl.style.fontSize = "12px";
+      });
+
+    const resetBtn = containerEl.createEl("button", { text: "Reset to default", cls: "oc-btn-small" });
+    resetBtn.onclick = async () => {
+      this.plugin.settings.claudeMdTemplate = DEFAULT_CLAUDE_MD_TEMPLATE;
+      await this.plugin.saveSettings();
+      this.display();
+    };
 
     containerEl.createEl("h3", { text: "Linked Projects" });
     this.renderLinkedProjects(containerEl);

@@ -88,7 +88,7 @@ export default class ObsidianConnectorPlugin extends Plugin {
 
     const basePath = (this.app.vault.adapter as any).getBasePath?.() ?? "";
     const vaultAbsPath = basePath ? `${basePath}/${vaultPath}` : vaultPath;
-    const result = await this.scaffoldingService.scaffold(codePath, vaultAbsPath);
+    const result = await this.scaffoldingService.scaffold(codePath, vaultAbsPath, this.settings.claudeMdTemplate);
 
     if (result.errors.some((e: string) => e.includes("uv is not installed"))) {
       new Notice(result.errors[0]);
