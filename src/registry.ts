@@ -49,6 +49,10 @@ export class LinkRegistry {
     return this.map.has(vaultPath);
   }
 
+  entries(): Array<{ vaultPath: string; codePath: string }> {
+    return Array.from(this.map.entries()).map(([vaultPath, codePath]) => ({ vaultPath, codePath }));
+  }
+
   private async persist(): Promise<void> {
     const data: Record<string, string> = {};
     for (const [v, c] of this.map) data[v] = c;

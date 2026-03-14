@@ -1,4 +1,6 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, PluginSettingTab, Setting, Notice } from "obsidian";
+import { execFile } from "child_process";
+import { access } from "fs/promises";
 
 export interface PluginSettings {
   tokenBudget: number;
@@ -80,5 +82,79 @@ export class ConnectorSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       );
+
+    containerEl.createEl("h3", { text: "Linked Projects" });
+    this.renderLinkedProjects(containerEl);
+  }
+
+  private renderLinkedProjects(containerEl: HTMLElement): void {
+    const entries = this.plugin.registry?.entries?.() ?? [];
+
+    if (entries.length === 0) {
+      containerEl.createEl("p", {
+        text: "No projects linked yet. Use the \"Obsidian Connector: Link project\" command.",
+        cls: "oc-empty-state",
+      });
+      return;
+    }
+
+    const list = containerEl.createEl("div", { cls: "oc-linked-projects" });
+
+    for (const { vaultPath, codePath } of entries) {
+      const row = list.createEl("div", { cls: "oc-linked-row" });
+
+      // Status indicator — async, starts as loading
+      const status = row.createEl("span", { text: "…", cls: "oc-status" });
+
+      // Vault path label
+      row.createEl("span", { text: vaultPath, cls: "oc-vault-path" });
+      row.createEl("span", { text: "→", cls: "oc-arrow" });
+
+      // Code path label
+      const resolvedCode = codePath.replace(/^~/, process.env.HOME ?? "");
+      row.createEl("span", { text: codePath, cls: "oc-code-path" });
+
+      // Reveal button (cross-platform)
+      const revealLabel =
+        process.platform === "darwin" ? "Reveal in Finder"
+        : process.platform === "win32" ? "Open in Explorer"
+        : "Open Folder";
+
+      const revealBtn = row.createEl("button", { text: revealLabel, cls: "oc-btn-small" });
+      revealBtn.onclick = () => revealInFileBrowser(resolvedCode);
+
+      // Unlink button
+      const unlinkBtn = row.createEl("button", { text: "Unlink", cls: "oc-btn-small oc-btn-danger" });
+      unlinkBtn.onclick = async () => {
+        await this.plugin.registry.unlink(vaultPath);
+        new Notice(`Unlinked "${vaultPath}"`);
+        this.display();
+      };
+
+      // Async status check
+      access(resolvedCode)
+        .then(() => {
+          status.textContent = "✓";
+          status.classList.add("oc-status-ok");
+          revealBtn.disabled = false;
+        })
+        .catch(() => {
+          status.textContent = "⚠";
+          status.classList.add("oc-status-warn");
+          revealBtn.disabled = true;
+          unlinkBtn.textContent = "Re-link / Unlink";
+        });
+    }
+  }
+}
+
+function revealInFileBrowser(absPath: string): void {
+  const platform = process.platform;
+  if (platform === "darwin") {
+    execFile("open", [absPath]);
+  } else if (platform === "win32") {
+    execFile("explorer", [absPath]);
+  } else {
+    execFile("xdg-open", [absPath]);
   }
 }
