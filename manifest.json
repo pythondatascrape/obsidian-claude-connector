@@ -1,0 +1,9 @@
+{
+  "id": "obsidian-connector",
+  "name": "Obsidian Connector",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Links Obsidian vault folders to code projects with Claude-powered context curation.",
+  "author": "emeyer",
+  "isDesktopOnly": true
+}
