@@ -16,21 +16,3 @@ describe("buildClaudeMd", () => {
     expect(md).toContain("changelog.md");
   });
 });
-
-describe("ScaffoldingService.buildUvCommand", () => {
-  it("returns correct uv init command", () => {
-    const svc = new ScaffoldingService({} as any);
-    expect(svc.buildUvCommand("/Users/x/Desktop/myproject")).toBe(
-      "uv init /Users/x/Desktop/myproject"
-    );
-  });
-});
-
-describe("ScaffoldingService.buildGhCommand", () => {
-  it("returns gh repo create command with source path", () => {
-    const svc = new ScaffoldingService({} as any);
-    expect(svc.buildGhCommand("myproject", "/Users/x/Desktop/myproject")).toBe(
-      "gh repo create myproject --private --source=/Users/x/Desktop/myproject --push"
-    );
-  });
-});

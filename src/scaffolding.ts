@@ -40,15 +40,6 @@ export class ScaffoldingService {
     this.app = app;
   }
 
-  buildUvCommand(codePath: string): string {
-    return `uv init ${codePath}`;
-  }
-
-  buildGhCommand(projectName: string, codePath?: string): string {
-    const src = codePath ? ` --source=${codePath}` : "";
-    return `gh repo create ${projectName} --private${src} --push`;
-  }
-
   async scaffold(codePath: string, vaultAbsPath: string): Promise<ScaffoldResult> {
     const result: ScaffoldResult = { uvDone: false, ghDone: false, claudeMdWritten: false, errors: [] };
 
