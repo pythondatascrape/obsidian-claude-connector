@@ -158,7 +158,7 @@ export class ConnectorSettingTab extends PluginSettingTab {
         const ta = templateTextArea;
         if (!ta) return;
         const start = ta.selectionStart ?? ta.value.length;
-        ta.value = ta.value.slice(0, start) + snippet.content + ta.value.slice(start);
+        ta.value = ta.value.slice(0, start) + snippet.content + ta.value.slice(ta.selectionEnd ?? start);
         ta.dispatchEvent(new Event("input"));
         this.plugin.settings.claudeMdTemplate = ta.value;
         this.plugin.saveSettings();

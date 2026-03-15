@@ -1,4 +1,5 @@
 import { Plugin, Modal, Setting, Notice } from "obsidian";
+import * as path from "path";
 import { ConnectorSettingTab, DEFAULT_SETTINGS, PluginSettings } from "./settings";
 import { LinkRegistry } from "./registry";
 import { ScaffoldingService } from "./scaffolding";
@@ -98,7 +99,7 @@ export default class ObsidianConnectorPlugin extends Plugin {
     const activeTypes = await this.promptProjectTypes(detected);
 
     const basePath = (this.app.vault.adapter as any).getBasePath?.() ?? "";
-    const vaultAbsPath = basePath ? `${basePath}/${vaultPath}` : vaultPath;
+    const vaultAbsPath = basePath ? path.join(basePath, vaultPath) : vaultPath;
     const result = await this.scaffoldingService.scaffold(
       codePath,
       vaultAbsPath,

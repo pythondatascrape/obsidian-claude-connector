@@ -1,4 +1,4 @@
-import { renderTemplate } from "../src/template-engine";
+import { renderTemplate, ProjectType } from "../src/template-engine";
 
 describe("renderTemplate — variables", () => {
   it("replaces {{vaultPath}}", () => {
