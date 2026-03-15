@@ -1,6 +1,7 @@
 import { App, PluginSettingTab, Setting, Notice } from "obsidian";
 import { execFile } from "child_process";
 import { access } from "fs/promises";
+import { SNIPPETS } from "./snippets";
 
 export const DEFAULT_CLAUDE_MD_TEMPLATE = `# Obsidian Connector — Claude Code Instructions
 
@@ -105,9 +106,34 @@ export class ConnectorSettingTab extends PluginSettingTab {
 
     containerEl.createEl("h3", { text: "CLAUDE.md Template" });
     containerEl.createEl("p", {
-      text: "Written to CLAUDE.md in the code project when you link a new project. Supports variables: {{vaultPath}}, {{projectName}}.",
+      text: "Written to CLAUDE.md when linking a new project.",
       cls: "setting-item-description",
     });
+
+    // Collapsible variable reference
+    const varRef = containerEl.createEl("details", { attr: { style: "margin-bottom:8px" } });
+    varRef.createEl("summary", { text: "Available variables", attr: { style: "cursor:pointer;font-size:12px;color:var(--text-muted)" } });
+    const varTable = varRef.createEl("table", { attr: { style: "font-size:12px;margin-top:4px;border-collapse:collapse" } });
+    const templateVars = [
+      ["{{vaultPath}}", "Absolute path to the linked vault folder"],
+      ["{{projectName}}", "Basename of the code directory"],
+      ["{{date}}", "Link date as YYYY-MM-DD"],
+      ["{{vaultName}}", "Obsidian vault name"],
+      ["{{pluginVersion}}", "Plugin version"],
+      ["{{#if python}}...{{/if}}", "Block shown only for Python projects"],
+      ["{{#if node}}...{{/if}}", "Block shown only for Node projects"],
+      ["{{#if typescript}}...{{/if}}", "Block shown only for TypeScript projects"],
+      ["{{#if go}}...{{/if}}", "Block shown only for Go projects"],
+      ["{{#if rust}}...{{/if}}", "Block shown only for Rust projects"],
+    ];
+    for (const [v, desc] of templateVars) {
+      const tr = varTable.createEl("tr");
+      tr.createEl("td", { text: v, attr: { style: "font-family:monospace;padding:2px 8px 2px 0;white-space:nowrap" } });
+      tr.createEl("td", { text: desc, attr: { style: "color:var(--text-muted)" } });
+    }
+
+    // Template textarea
+    let templateTextArea: HTMLTextAreaElement;
     new Setting(containerEl)
       .addTextArea((text) => {
         text
@@ -120,8 +146,26 @@ export class ConnectorSettingTab extends PluginSettingTab {
         text.inputEl.style.width = "100%";
         text.inputEl.style.fontFamily = "monospace";
         text.inputEl.style.fontSize = "12px";
+        templateTextArea = text.inputEl;
       });
 
+    // Snippet insert buttons
+    containerEl.createEl("p", { text: "Insert snippet:", attr: { style: "margin:6px 0 4px;font-size:12px;color:var(--text-muted)" } });
+    const snippetRow = containerEl.createEl("div", { attr: { style: "display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px" } });
+    for (const snippet of SNIPPETS) {
+      const btn = snippetRow.createEl("button", { text: snippet.label, cls: "oc-btn-small" });
+      btn.onclick = () => {
+        const ta = templateTextArea;
+        if (!ta) return;
+        const start = ta.selectionStart ?? ta.value.length;
+        ta.value = ta.value.slice(0, start) + snippet.content + ta.value.slice(start);
+        ta.dispatchEvent(new Event("input"));
+        this.plugin.settings.claudeMdTemplate = ta.value;
+        this.plugin.saveSettings();
+      };
+    }
+
+    // Reset button
     const resetBtn = containerEl.createEl("button", { text: "Reset to default", cls: "oc-btn-small" });
     resetBtn.onclick = async () => {
       this.plugin.settings.claudeMdTemplate = DEFAULT_CLAUDE_MD_TEMPLATE;
