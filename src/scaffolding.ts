@@ -3,6 +3,7 @@ import { promisify } from "util";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { expandTilde } from "./utils";
+import { renderTemplate, ProjectType } from "./template-engine";
 
 const execFileAsync = promisify(execFile);
 
@@ -13,10 +14,19 @@ export interface ScaffoldResult {
   errors: string[];
 }
 
-export function buildClaudeMd(vaultAbsPath: string, projectName: string, template: string): string {
-  return template
-    .replace(/\{\{vaultPath\}\}/g, vaultAbsPath)
-    .replace(/\{\{projectName\}\}/g, projectName);
+export function buildClaudeMd(
+  vaultAbsPath: string,
+  projectName: string,
+  template: string,
+  activeTypes: ProjectType[],
+  date?: string,
+): string {
+  const resolvedDate = date ?? new Date().toISOString().slice(0, 10);
+  return renderTemplate(template, {
+    vaultPath: vaultAbsPath,
+    projectName,
+    date: resolvedDate,
+  }, activeTypes);
 }
 
 export class ScaffoldingService {
@@ -26,7 +36,12 @@ export class ScaffoldingService {
     this.app = app;
   }
 
-  async scaffold(codePath: string, vaultAbsPath: string, claudeMdTemplate: string): Promise<ScaffoldResult> {
+  async scaffold(
+    codePath: string,
+    vaultAbsPath: string,
+    claudeMdTemplate: string,
+    activeTypes: ProjectType[] = [],
+  ): Promise<ScaffoldResult> {
     const result: ScaffoldResult = { uvDone: false, ghDone: false, claudeMdWritten: false, errors: [] };
 
     const resolved = expandTilde(codePath);
@@ -59,7 +74,7 @@ export class ScaffoldingService {
 
     try {
       const claudeMdPath = path.join(resolved, "CLAUDE.md");
-      await fs.writeFile(claudeMdPath, buildClaudeMd(vaultAbsPath, projectName, claudeMdTemplate), "utf-8");
+      await fs.writeFile(claudeMdPath, buildClaudeMd(vaultAbsPath, projectName, claudeMdTemplate, activeTypes), "utf-8");
       result.claudeMdWritten = true;
     } catch (e: any) {
       result.errors.push(`Failed to write CLAUDE.md: ${e.message}`);
