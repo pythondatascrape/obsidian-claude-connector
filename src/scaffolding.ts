@@ -2,7 +2,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { expandTilde } from "./utils";
+import { expandTilde, assertSafePath } from "./utils";
 import { renderTemplate, TemplateVars, ProjectType } from "./template-engine";
 
 const execFileAsync = promisify(execFile);
@@ -34,21 +34,20 @@ export class ScaffoldingService {
     const result: ScaffoldResult = { uvDone: false, ghDone: false, claudeMdWritten: false, errors: [] };
 
     const resolved = expandTilde(codePath);
+    assertSafePath(resolved);
 
-    let dirExists = false;
-    try { await fs.access(resolved); dirExists = true; } catch {}
-
-    if (!dirExists) {
-      try {
-        await execFileAsync("uv", ["init", resolved]);
-        result.uvDone = true;
-      } catch (e: any) {
-        const msg = e.message ?? "";
-        if (msg.includes("command not found") || msg.includes("not found")) {
-          result.errors.push("uv is not installed. Install from https://docs.astral.sh/uv/");
-          return result;
-        }
-        result.errors.push(`uv init failed: ${msg}`);
+    try {
+      await execFileAsync("uv", ["init", resolved]);
+      result.uvDone = true;
+    } catch (e: any) {
+      const msg = e.message ?? "";
+      if (msg.includes("command not found") || msg.includes("not found")) {
+        result.errors.push("uv is not installed. Install from https://docs.astral.sh/uv/");
+        return result;
+      }
+      // Directory likely already exists — not fatal, continue
+      if (!msg.includes("already exists") && !msg.includes("destination")) {
+        result.errors.push("uv init failed. Check that the path is valid.");
         return result;
       }
     }
@@ -57,8 +56,8 @@ export class ScaffoldingService {
     try {
       await execFileAsync("gh", ["repo", "create", projectName, "--private", `--source=${resolved}`, "--push"]);
       result.ghDone = true;
-    } catch (e: any) {
-      result.errors.push(`GitHub setup skipped: ${e.message}`);
+    } catch {
+      result.errors.push("GitHub setup skipped: gh not installed or repo already exists.");
     }
 
     try {

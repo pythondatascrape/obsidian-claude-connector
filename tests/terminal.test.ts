@@ -1,14 +1,22 @@
-import { buildTerminalCommand, buildFallbackMessage } from "../src/terminal";
+import { buildFallbackMessage, isAllowedTerminal, TERMINAL_ALLOWLIST } from "../src/terminal";
 
-describe("buildTerminalCommand", () => {
-  it("builds open -a command with quoted args", () => {
-    expect(buildTerminalCommand("Terminal", "/Users/x/Desktop/project"))
-      .toBe(`open -a "Terminal" "/Users/x/Desktop/project"`);
+describe("isAllowedTerminal", () => {
+  it("allows listed terminals", () => {
+    expect(isAllowedTerminal("Terminal")).toBe(true);
+    expect(isAllowedTerminal("iTerm2")).toBe(true);
+    expect(isAllowedTerminal("Warp")).toBe(true);
   });
 
-  it("handles paths with spaces", () => {
-    expect(buildTerminalCommand("iTerm", "/Users/x/Desktop/my project"))
-      .toBe(`open -a "iTerm" "/Users/x/Desktop/my project"`);
+  it("rejects unlisted terminals", () => {
+    expect(isAllowedTerminal("bash")).toBe(false);
+    expect(isAllowedTerminal("; rm -rf ~")).toBe(false);
+    expect(isAllowedTerminal("")).toBe(false);
+  });
+});
+
+describe("TERMINAL_ALLOWLIST", () => {
+  it("contains at least the default terminal", () => {
+    expect(TERMINAL_ALLOWLIST).toContain("Terminal");
   });
 });
 

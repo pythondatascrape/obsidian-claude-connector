@@ -64,7 +64,14 @@ export default class ObsidianConnectorPlugin extends Plugin {
   async loadSettings() {
     const data = await this.loadData();
     this._data = data ?? {};
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, data?.settings ?? {});
+    const saved = data?.settings ?? {};
+    this.settings = {
+      tokenBudget: typeof saved.tokenBudget === "number" ? saved.tokenBudget : DEFAULT_SETTINGS.tokenBudget,
+      terminalApp: typeof saved.terminalApp === "string" ? saved.terminalApp : DEFAULT_SETTINGS.terminalApp,
+      gitignoreRules: typeof saved.gitignoreRules === "string" ? saved.gitignoreRules : DEFAULT_SETTINGS.gitignoreRules,
+      envExampleContent: typeof saved.envExampleContent === "string" ? saved.envExampleContent : DEFAULT_SETTINGS.envExampleContent,
+      claudeMdTemplate: typeof saved.claudeMdTemplate === "string" ? saved.claudeMdTemplate : DEFAULT_SETTINGS.claudeMdTemplate,
+    };
   }
 
   async saveSettings() {

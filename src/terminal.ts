@@ -1,11 +1,23 @@
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import { expandTilde } from "./utils";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
-export function buildTerminalCommand(terminalApp: string, codePath: string): string {
-  return `open -a "${terminalApp}" "${codePath}"`;
+export const TERMINAL_ALLOWLIST = [
+  "Terminal",
+  "iTerm",
+  "iTerm2",
+  "Warp",
+  "Alacritty",
+  "Hyper",
+  "Kitty",
+  "WezTerm",
+  "Ghostty",
+];
+
+export function isAllowedTerminal(terminalApp: string): boolean {
+  return TERMINAL_ALLOWLIST.includes(terminalApp);
 }
 
 export function buildFallbackMessage(codePath: string): string {
@@ -20,11 +32,13 @@ export class TerminalService {
   }
 
   async launch(codePath: string): Promise<void> {
+    if (!isAllowedTerminal(this.terminalApp)) {
+      throw new Error(`Terminal "${this.terminalApp}" is not in the allowed list.`);
+    }
     const resolved = expandTilde(codePath);
-    const cmd = buildTerminalCommand(this.terminalApp, resolved);
     try {
-      await execAsync(cmd);
-    } catch (e: any) {
+      await execFileAsync("open", ["-a", this.terminalApp, resolved]);
+    } catch {
       throw new Error(buildFallbackMessage(resolved));
     }
   }

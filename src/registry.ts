@@ -17,6 +17,12 @@ export class LinkRegistry {
   }
 
   async link(vaultPath: string, codePath: string): Promise<void> {
+    if (!codePath || codePath.includes("\0")) {
+      throw new Error("Invalid code path.");
+    }
+    if (!codePath.startsWith("/") && !codePath.startsWith("~/") && codePath !== "~") {
+      throw new Error(`Code path must be absolute or start with ~/`);
+    }
     if (this.map.has(vaultPath)) {
       throw new Error(`Vault path "${vaultPath}" is already linked to "${this.map.get(vaultPath)}"`);
     }

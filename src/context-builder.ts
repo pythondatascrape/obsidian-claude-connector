@@ -1,6 +1,6 @@
 import * as fs from "fs/promises";
 import * as path from "path";
-import { expandTilde } from "./utils";
+import { expandTilde, assertSafePath } from "./utils";
 
 const SECRET_PATTERNS = /(?:key|token|secret|password|api_key)=/i;
 
@@ -33,18 +33,24 @@ export function greedySelect(notes: NoteWithContent[], budgetTokens: number): No
   return selected;
 }
 
+function redactSecrets(content: string): string {
+  return content.split("\n").map(line =>
+    SECRET_PATTERNS.test(line) ? "[REDACTED — possible secret]" : line
+  ).join("\n");
+}
+
 export function buildContextFile(
   designContent: string,
   relatedNotes: NoteWithContent[],
   diagramPaths: string[]
 ): string {
-  const lines: string[] = ["# Claude Context\n", "## Design\n", designContent.trim(), ""];
+  const lines: string[] = ["# Claude Context\n", "## Design\n", redactSecrets(designContent.trim()), ""];
 
   if (relatedNotes.length > 0) {
     lines.push("## Related\n");
     for (const note of relatedNotes) {
       lines.push(`### ${note.path}\n`);
-      lines.push(note.content.trim());
+      lines.push(redactSecrets(note.content.trim()));
       lines.push("");
     }
   }
@@ -61,6 +67,7 @@ export function buildContextFile(
 
 export async function writeContextFile(codePath: string, content: string): Promise<void> {
   const resolved = expandTilde(codePath);
+  assertSafePath(resolved);
   const dest = path.join(resolved, ".claude-context.md");
   await fs.writeFile(dest, content, "utf-8");
 }

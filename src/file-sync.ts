@@ -1,6 +1,6 @@
 import * as fs from "fs/promises";
 import * as path from "path";
-import { expandTilde, escapeRegex } from "./utils";
+import { expandTilde, escapeRegex, assertSafePath } from "./utils";
 
 const BEGIN_MARKER = "# [Obsidian Connector] BEGIN";
 const END_MARKER = "# [Obsidian Connector] END";
@@ -65,6 +65,7 @@ export class FileSyncService {
 
   async syncGitignoreForPath(codePath: string): Promise<void> {
     const resolved = expandTilde(codePath);
+    assertSafePath(resolved);
     const gitignorePath = path.join(resolved, ".gitignore");
     let existing = "";
     try { existing = await fs.readFile(gitignorePath, "utf-8"); } catch {}
@@ -74,6 +75,7 @@ export class FileSyncService {
 
   async syncEnvExampleForPath(codePath: string): Promise<void> {
     const resolved = expandTilde(codePath);
+    assertSafePath(resolved);
     const dest = path.join(resolved, ".env.example");
     await fs.writeFile(dest, this.plugin.settings.envExampleContent, "utf-8");
   }
