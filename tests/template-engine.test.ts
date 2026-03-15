@@ -36,3 +36,40 @@ describe("renderTemplate — variables", () => {
     expect(result).toBe("{{unknown}}");
   });
 });
+
+describe("renderTemplate — conditionals", () => {
+  it("includes block when condition is active", () => {
+    const result = renderTemplate("{{#if python}}use uv{{/if}}", {}, ["python"]);
+    expect(result).toBe("use uv");
+  });
+
+  it("excludes block when condition is inactive", () => {
+    const result = renderTemplate("{{#if python}}use uv{{/if}}", {}, []);
+    expect(result).toBe("");
+  });
+
+  it("handles multiline conditional blocks", () => {
+    const template = "{{#if node}}\nnpm install\nnpm test\n{{/if}}";
+    const result = renderTemplate(template, {}, ["node"]);
+    expect(result).toBe("\nnpm install\nnpm test\n");
+  });
+
+  it("handles multiple conditional blocks independently", () => {
+    const template = "{{#if python}}py{{/if}}{{#if node}}js{{/if}}";
+    const result = renderTemplate(template, {}, ["python"]);
+    expect(result).toBe("py");
+  });
+
+  it("supports all project types as conditions", () => {
+    const types: ProjectType[] = ["python", "node", "typescript", "go", "rust"];
+    for (const t of types) {
+      const result = renderTemplate(`{{#if ${t}}}yes{{/if}}`, {}, [t]);
+      expect(result).toBe("yes");
+    }
+  });
+
+  it("variables inside conditional blocks are still replaced", () => {
+    const result = renderTemplate("{{#if python}}{{projectName}}{{/if}}", { projectName: "myapp" }, ["python"]);
+    expect(result).toBe("myapp");
+  });
+});
