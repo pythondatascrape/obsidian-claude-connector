@@ -6,6 +6,9 @@ import { ExcalidrawService } from "./excalidraw";
 import { TerminalService } from "./terminal";
 import { FileSyncService } from "./file-sync";
 import { ChatPanelView, CHAT_PANEL_VIEW } from "./chat-panel";
+import { detectProjectTypes } from "./project-detector";
+import { ProjectType } from "./template-engine";
+import { expandTilde } from "./utils";
 
 export default class ObsidianConnectorPlugin extends Plugin {
   settings: PluginSettings;
@@ -32,7 +35,11 @@ export default class ObsidianConnectorPlugin extends Plugin {
     });
     await this.registry.load();
 
-    this.scaffoldingService = new ScaffoldingService(this.app);
+    this.scaffoldingService = new ScaffoldingService(
+      this.app,
+      this.app.vault.getName(),
+      this.manifest.version,
+    );
     this.excalidrawService = new ExcalidrawService(this.app);
     this.terminalService = new TerminalService(this.settings.terminalApp);
     this.fileSyncService = new FileSyncService(this);
@@ -86,9 +93,18 @@ export default class ObsidianConnectorPlugin extends Plugin {
       return;
     }
 
+    const resolvedCode = expandTilde(codePath);
+    const detected = await detectProjectTypes(resolvedCode);
+    const activeTypes = await this.promptProjectTypes(detected);
+
     const basePath = (this.app.vault.adapter as any).getBasePath?.() ?? "";
     const vaultAbsPath = basePath ? `${basePath}/${vaultPath}` : vaultPath;
-    const result = await this.scaffoldingService.scaffold(codePath, vaultAbsPath, this.settings.claudeMdTemplate);
+    const result = await this.scaffoldingService.scaffold(
+      codePath,
+      vaultAbsPath,
+      this.settings.claudeMdTemplate,
+      activeTypes,
+    );
 
     if (result.errors.some((e: string) => e.includes("uv is not installed"))) {
       new Notice(result.errors[0]);
@@ -126,6 +142,37 @@ export default class ObsidianConnectorPlugin extends Plugin {
           btn.onclick = () => this.close();
         }
         onClose() { resolve(result); }
+      })(this.app);
+      modal.open();
+    });
+  }
+
+  private promptProjectTypes(detected: ProjectType[]): Promise<ProjectType[]> {
+    const allTypes: ProjectType[] = ["python", "node", "typescript", "go", "rust"];
+    return new Promise((resolve) => {
+      let selected = new Set<ProjectType>(detected);
+      let resolved = false;
+      const modal = new (class extends Modal {
+        onOpen() {
+          this.contentEl.createEl("p", {
+            text: detected.length > 0
+              ? `Detected project types: ${detected.join(", ")}. Adjust if needed:`
+              : "No project types detected. Select any that apply:",
+          });
+          for (const type of allTypes) {
+            const row = this.contentEl.createEl("div", { attr: { style: "margin:4px 0" } });
+            const cb = row.createEl("input", { attr: { type: "checkbox" } }) as HTMLInputElement;
+            cb.checked = selected.has(type);
+            cb.onchange = () => {
+              if (cb.checked) selected.add(type);
+              else selected.delete(type);
+            };
+            row.createEl("label", { text: ` ${type}`, attr: { style: "margin-left:6px" } });
+          }
+          const btn = this.contentEl.createEl("button", { text: "OK", attr: { style: "margin-top:12px" } });
+          btn.onclick = () => { resolved = true; resolve(Array.from(selected)); this.close(); };
+        }
+        onClose() { if (!resolved) resolve(Array.from(selected)); }
       })(this.app);
       modal.open();
     });

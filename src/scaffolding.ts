@@ -3,7 +3,7 @@ import { promisify } from "util";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { expandTilde } from "./utils";
-import { renderTemplate, ProjectType } from "./template-engine";
+import { renderTemplate, TemplateVars, ProjectType } from "./template-engine";
 
 const execFileAsync = promisify(execFile);
 
@@ -15,25 +15,22 @@ export interface ScaffoldResult {
 }
 
 export function buildClaudeMd(
-  vaultAbsPath: string,
-  projectName: string,
+  vars: TemplateVars,
   template: string,
   activeTypes: ProjectType[],
-  date?: string,
 ): string {
-  const resolvedDate = date ?? new Date().toISOString().slice(0, 10);
-  return renderTemplate(template, {
-    vaultPath: vaultAbsPath,
-    projectName,
-    date: resolvedDate,
-  }, activeTypes);
+  return renderTemplate(template, vars, activeTypes);
 }
 
 export class ScaffoldingService {
   private app: any;
+  private vaultName: string;
+  private pluginVersion: string;
 
-  constructor(app: any) {
+  constructor(app: any, vaultName: string, pluginVersion: string) {
     this.app = app;
+    this.vaultName = vaultName;
+    this.pluginVersion = pluginVersion;
   }
 
   async scaffold(
@@ -74,7 +71,14 @@ export class ScaffoldingService {
 
     try {
       const claudeMdPath = path.join(resolved, "CLAUDE.md");
-      await fs.writeFile(claudeMdPath, buildClaudeMd(vaultAbsPath, projectName, claudeMdTemplate, activeTypes), "utf-8");
+      const vars: TemplateVars = {
+        vaultPath: vaultAbsPath,
+        projectName,
+        date: new Date().toISOString().slice(0, 10),
+        vaultName: this.vaultName,
+        pluginVersion: this.pluginVersion,
+      };
+      await fs.writeFile(claudeMdPath, buildClaudeMd(vars, claudeMdTemplate, activeTypes), "utf-8");
       result.claudeMdWritten = true;
     } catch (e: any) {
       result.errors.push(`Failed to write CLAUDE.md: ${e.message}`);
