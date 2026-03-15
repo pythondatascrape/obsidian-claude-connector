@@ -4,3 +4,7 @@ export function expandTilde(p: string): string {
   }
   return p;
 }
+
+export function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}

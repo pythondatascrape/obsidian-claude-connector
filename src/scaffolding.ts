@@ -14,14 +14,6 @@ export interface ScaffoldResult {
   errors: string[];
 }
 
-export function buildClaudeMd(
-  vars: TemplateVars,
-  template: string,
-  activeTypes: ProjectType[],
-): string {
-  return renderTemplate(template, vars, activeTypes);
-}
-
 export class ScaffoldingService {
   private app: any;
   private vaultName: string;
@@ -78,7 +70,7 @@ export class ScaffoldingService {
         vaultName: this.vaultName,
         pluginVersion: this.pluginVersion,
       };
-      await fs.writeFile(claudeMdPath, buildClaudeMd(vars, claudeMdTemplate, activeTypes), "utf-8");
+      await fs.writeFile(claudeMdPath, renderTemplate(claudeMdTemplate, vars, activeTypes), "utf-8");
       result.claudeMdWritten = true;
     } catch (e: any) {
       result.errors.push(`Failed to write CLAUDE.md: ${e.message}`);

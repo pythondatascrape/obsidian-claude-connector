@@ -1,3 +1,5 @@
+import { escapeRegex } from "./utils";
+
 export interface TemplateVars {
   vaultPath?: string;
   projectName?: string;
@@ -8,10 +10,6 @@ export interface TemplateVars {
 }
 
 export type ProjectType = "python" | "node" | "typescript" | "go" | "rust";
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 export function renderTemplate(template: string, vars: TemplateVars, activeTypes: ProjectType[]): string {
   let result = template;

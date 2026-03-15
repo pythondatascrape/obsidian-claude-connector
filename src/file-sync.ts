@@ -1,13 +1,9 @@
 import * as fs from "fs/promises";
 import * as path from "path";
-import { expandTilde } from "./utils";
+import { expandTilde, escapeRegex } from "./utils";
 
 const BEGIN_MARKER = "# [Obsidian Connector] BEGIN";
 const END_MARKER = "# [Obsidian Connector] END";
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 export function injectManagedBlock(existingContent: string, rules: string): string {
   const block = `${BEGIN_MARKER}\n${rules.trim()}\n${END_MARKER}`;

@@ -11,15 +11,15 @@ export const PROJECT_TYPE_INDICATORS: Record<ProjectType, string[]> = {
 };
 
 export async function detectProjectTypes(codePath: string): Promise<ProjectType[]> {
-  const detected: ProjectType[] = [];
-  for (const [type, indicators] of Object.entries(PROJECT_TYPE_INDICATORS)) {
+  const checks = Object.entries(PROJECT_TYPE_INDICATORS).map(async ([type, indicators]) => {
     for (const indicator of indicators) {
       try {
         await fs.access(path.join(codePath, indicator));
-        detected.push(type as ProjectType);
-        break;
+        return type as ProjectType;
       } catch {}
     }
-  }
-  return detected;
+    return null;
+  });
+  const results = await Promise.all(checks);
+  return results.filter((t): t is ProjectType => t !== null);
 }
